@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<rss version="2.0">
+    <channel>
+        <title>{% if is_frontpage %}Front page{% else %}{% ifequal section.name "News" %}Northwest{% else %}{{ section.name }}{% endifequal %}{% endif %}</title>{# OUR 'NORTHWEST' PRINT SECTION IS CALLED 'NEWS' ON THE SITE #}
+        <link>http://{{ site.domain }}/{% if not is_frontpage %}{{ section.slug }}/{% endif %}</link>
+        <pubDate>{{ pubdate|date:"D, d M Y H:i:s" }}</pubDate>{% for article in article_list %}
+        <item>
+            <title>{{ article.headline }}</title>
+            <link>http://{{ site.domain }}{% url kindle_article_file article.id %}</link>
+            <description>{{ article.teaser_text }}</description>
+            <pubDate>{{ article.pubdate|date:"D, d M Y H:i:s" }}</pubDate>
+            <author>{% if article.get_byline %}{{ article.get_byline|cut:"By " }}{% endif %}</author>
+        </item>{% endfor %}
+    </channel>
+</rss>

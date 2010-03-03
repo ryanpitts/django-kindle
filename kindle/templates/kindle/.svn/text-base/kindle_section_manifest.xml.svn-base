@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<rss version="2.0">
+    <channel>
+        <title>The Spokesman-Review</title>
+        <link>http://www.spokesman.com/</link>
+        <pubDate>{{ pubdate|date:"D, d M Y H:i:s" }}</pubDate>
+        <item>{# Hard-coded because Amazon always wants a front-page section #}
+            <link>http://{{ site.domain }}/kindle/xml/article-manifest/{{ pubdate|date:"Y/m/d"}}/front-page/</link>
+        </item>{% for section in section_list %}
+        <item>
+            <link>http://{{ site.domain }}/kindle/xml/article-manifest/{{ pubdate|date:"Y/m/d"}}/{{ section.slug }}/</link>
+        </item>{% endfor %}
+    </channel>
+</rss>

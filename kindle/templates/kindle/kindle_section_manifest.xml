@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<rss version="2.0">
+    <channel>
+        <title>The Spokesman-Review</title>
+        <link>http://www.spokesman.com/</link>
+        <pubDate>{{ pubdate|date:"D, d M Y H:i:s" }}</pubDate>{# AMAZON'S PREFERRED DATE FORMAT #}
+        <item>{# HARD-CODED BECAUSE AMAZON ALWAYS WANTS A FRONT-PAGE SECTION #}
+            <link>http://{{ site.domain }}{% url kindle_article_manifest pubdate.year pubdate.month pubdate.day 'front-page' %}</link>
+        </item>{% for section in section_list %}{# ADD THE REST OF THE SECTIONS #}
+        <item>
+            <link>http://{{ site.domain }}{% url kindle_article_manifest pubdate.year pubdate.month pubdate.day section.slug %}</link>
+        </item>{% endfor %}
+    </channel>
+</rss>

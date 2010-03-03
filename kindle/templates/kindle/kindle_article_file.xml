@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<nitf baselang="en-US">
+    <head>
+        <docdata management-status="usable">
+            <date.release norm="{{ article.pubdate|date:"Ymd\THisO" }}" />{# AMAZON'S PREFERRED DATE FORMAT #}
+        </docdata>
+    </head>
+    <body>
+        <body.head>
+            <hedline>
+                <hl1>{{ article.headline }}</hl1>
+            </hedline>
+            <byline>{{ article.get_byline }}</byline>
+            <abstract>
+                {% spaceless %}{{ article.teaser_text|linebreaks }}{% endspaceless %}
+            </abstract>
+        </body.head>
+        <body.content>
+            <block>
+                {% spaceless %}{{ article.story_text|safe }}{% endspaceless %}
+            </block>
+            {% if article.story_photos.all %}{% load mogrify %}<block>{% for photo in article.story_photos.all %}
+                <media media-type="image">
+                    <media-metadata name="type" value="photo" />
+                    <media-caption>{{ photo.description }}</media-caption>
+                    <media-producer>{{ photo.get_photographer }}</media-producer>
+                    <media-reference mime-type="image/jpeg" width="800" height="{% widthratio photo.photo.height photo.photo.width 800 %}" name="article image" units="pixels">{{ mogrify photo.photo.url }}{# URL TO 800px THUMBNAILED VERSION OF PHOTO #}</media-reference>
+                </media>{% endfor %}
+            </block>{% endif %}
+        </body.content>
+        <body.end>
+            <tagline typ="std" />
+        </body.end>
+    </body>
+</nitf>

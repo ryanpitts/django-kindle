@@ -1,0 +1,231 @@
+from django.conf import settings
+from django.views.generic.list_detail import object_detail
+from django.views.generic import simple
+from django.http import Http404
+from django.contrib.sites.models import Site
+
+import datetime
+import time
+from dateutil.relativedelta import *
+
+from cannonball.stories.models import Story, BaseSection
+from cannonball.core.ipaddr import IPv4
+
+
+allowed_timeframe = datetime.datetime.today()+relativedelta(days=-6)
+
+
+def kindle_article_detail(request, object_id):
+    '''
+    View returning an individual print-edition story for Kindle ingestion.
+    
+    Story.live_objects goes through a manager on our Story model, prefiltering the queryset
+    for is_live=True, pubdate__lte=now, sites=settings.SITE_ID. The Story model also has fields
+    to hold additional information from our print publication, so by making sure those contain
+    data, we filter for ONLY stories from the print edition.
+    
+    This feeds an NITF template, which naturally is specific to the fields in our
+    particular Story model. Easy enough to tweak, though.
+    
+    '''
+    qs = Story.live_objects.filter(pubdate__gte=allowed_timeframe).exclude(print_sectionletter=None).exclude(print_pagenumber=None)
+    return object_detail(
+        request,
+        queryset = qs,
+        object_id = object_id,
+        template_object_name = "article",
+        template_name = "kindle/kindle_article_file.xml",
+    )
+
+
+def kindle_article_manifest(request, year, month, day, section, template='kindle/kindle_article_manifest.xml'):
+    '''
+    View returning a list of print-edition stories within a section for a given pubdate.
+    
+    BaseSection is the website model that (basically) maps to print edition sections.
+    So we have BaseSections for News, Sports, Opinion, etc. On the website, BaseSections
+    collect their stories based on Categories (because a BaseSection may contain more
+    than one Category of Story). Hence the generation of cat_list for the queryset filter.
+    
+    The section_manifest template (see kindle_section_manifest below) hardcodes a "Front Page"
+    section, because Kindle wants to provide a specific list of front-page stories. We don't have
+    a BaseSection like that, so we fake it here by filtering for stories that appeared on A1.
+    
+    This feeds an RSS 2.0 template.
+    
+    '''
+    SITE = Site.objects.get_current()
+    try:
+        search_date = datetime.datetime(*time.strptime(year+month+day, '%Y'+'%m'+'%d')[:3])
+        year = int(search_date.strftime('%Y')) 
+        month = int(search_date.strftime('%m')) 
+        day = int(search_date.strftime('%d'))
+    except ValueError:
+        raise Http404
+        
+    if allowed_timeframe and search_date < allowed_timeframe:
+        raise Http404
+        
+    is_frontpage = False
+    if section == 'front-page':
+        stories = Story.live_objects.filter(pubdate__year=year, pubdate__month=month, pubdate__day=day).filter(print_sectionletter__exact = 'A').filter(print_pagenumber__exact='1')
+        is_frontpage = True
+    else:
+        section = BaseSection.objects.get(slug__exact=section)
+        cat_list = section.categories.all()
+        stories = Story.live_objects.filter(pubdate__year=year, pubdate__month=month, pubdate__day=day).exclude(print_sectionletter=None).exclude(print_pagenumber=None).exclude(print_sectionletter__exact='A',print_pagenumber__exact='1').filter(categories__in=cat_list).order_by('print_sectionletter', 'print_pagenumber').distinct()
+        
+    return simple.direct_to_template(
+        request,
+        template = template,
+        extra_context = {
+            'article_list': stories,
+            'pubdate': search_date,
+            'section': section,
+            'is_frontpage': is_frontpage,
+            'site': SITE,
+        }
+    )
+
+
+def kindle_section_manifest(request, year=None, month=None, day=None, template='kindle/kindle_section_manifest.xml'):
+    '''
+    View returning a list of sections that contain stories for a given pubdate. Default is today's date,
+    but access to back pubdates is available based on allowed_timeframe.
+    
+    See kindle_article_manifest above for information about BaseSection. For the Kindle edition
+    of a newspaper, Amazon divides stories up into the same sections as the print edition. They want
+    to present sections in a standard order for each edition, so first we find all the BaseSections
+    for the site, then we test each to see whether they contain any stories for the pubdate. (There's
+    probably a more graceful way to do this.)
+    
+    Once we have the list of all BaseSections that contain stories for the pubdate, we loop through
+    and standardize the order.
+    
+    This feeds an RSS 2.0 template.
+    
+    '''
+    SITE = Site.objects.get_current()
+    sections = BaseSection.objects.filter(site__id__exact=settings.SITE_ID).filter(is_live__exact=True)
+    #get me a date!
+    if year == month == day == None:
+        search_date = datetime.datetime.today().replace(hour=0,minute=0,second=0)
+    else:
+        try:
+            search_date = datetime.datetime(*time.strptime(year+month+day, '%Y'+'%m'+'%d')[:3])
+        except ValueError:
+            raise Http404
+    
+    if search_date:
+        if allowed_timeframe and search_date < allowed_timeframe:
+            raise Http404
+        else:
+            year = int(search_date.strftime('%Y')) 
+            month = int(search_date.strftime('%m')) 
+            day = int(search_date.strftime('%d'))
+    
+    #figure out sections for which we have stories for this pubdate
+    sections_withstories = []
+    for section in sections:
+        cat_list = section.categories.all()
+        stories = Story.live_objects.filter(pubdate__year=year, pubdate__month=month, pubdate__day=day).exclude(print_sectionletter=None).exclude(print_pagenumber=None).filter(categories__in=cat_list)
+        if stories:
+            sections_withstories.append(section)
+
+    #now that we know which sections have stories, put them in the right order for Amazon
+    section_list = []
+    amazon_order = ['News','Sports','Business','Features','Idaho','Opinion','Nation/World']
+    for a in amazon_order:
+        for s in sections_withstories:
+            if s.name == a:
+                sections_withstories.remove(s)
+                section_list.append(s)
+    
+    #append any leftover sections (i.e. things that run on specific days, like Outdoors, Food, Handle Extra)
+    for s in sections_withstories:
+        section_list.append(s)
+    
+    return simple.direct_to_template(
+        request,
+        template = template,
+        extra_context = {
+            'section_list': section_list,
+            'pubdate': search_date,
+            'site': SITE,
+        }
+    )
+
+
+
+'''
+Code for locking down access to only Amazon's IP addresses
+
+Cluster      Firewall IP(s)*
+DUB     87.238.84.64, 87.238.80.64
+IAD     207.171.167.101, 207.171.172.6, 207.171.167.25, 207.171.167.26, 72.21.196.64 - 69, 72.21.198.64 - 69
+SEA     207.171.180.101, 207.171.191.60
+
+Cluster      Aggregates
+DUB     87.238.80.0/21
+IAD     72.21.192.0/19, 207.171.160.0/20
+SEA     207.171.176.0/20
+PEK     203.83.220.0/22, 203.81.16.0/23 *
+'''
+APPROVED_IPS = (
+    '87.238.84.64',
+    '87.238.80.64',
+    '207.171.167.101',
+    '207.171.172.6',
+    '207.171.167.25',
+    '207.171.167.26',
+    '72.21.196.64',
+    '72.21.196.65',
+    '72.21.196.66',
+    '72.21.196.67',
+    '72.21.196.68',
+    '72.21.196.69',
+    '72.21.198.64',
+    '72.21.198.65',
+    '72.21.198.66',
+    '72.21.198.67',
+    '72.21.198.68',
+    '72.21.198.69',
+    '207.171.180.101',
+    '207.171.191.60',
+    '87.238.80.0/21',
+    '72.21.192.0/19',
+    '207.171.160.0/20',
+    '207.171.176.0/20',
+    '203.83.220.0/22',
+    '203.81.16.0/23',
+)
+
+def ip_in_whitelist(request_ip):
+    # the long int version of the ip address
+    user_ip = IPv4(request_ip).ip
+
+    for whitelist_ip in APPROVED_IPS:
+        w_ip = IPv4(whitelist_ip)
+
+        # if ip == the network's base IP (which is the case if we're giving it a straight IP with
+        # no range suffix) OR if ip is within the subnet for the given range
+        # (a machine's address in a subnet can't ever be the broadcast address so it's < not <=)
+        if (user_ip == w_ip.network) or ((user_ip >= w_ip.network) and (user_ip < w_ip.broadcast)):
+            # if match, return true (short circuits the rest of the function)
+            return True
+    return False
+'''
+# simple doctest:
+>>> ip_in_whitelist('127.0.0.1')
+False
+>>> ip_in_whitelist('72.21.192.250')
+True
+>>> ip_in_whitelist('72.21.223.250') # same range as previous example
+True
+>>> ip_in_whitelist('72.21.223.255') # broadcast addy for previous range, so invalid
+False
+
+if not ip_in_whitelist(request.META['REMOTE_ADDR']):
+    return Http404
+
+'''

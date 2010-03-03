@@ -1,0 +1,111 @@
+==========================
+Django Kindle
+==========================
+
+This is a simple app to help a newspaper website feed daily print-edition
+stories to Amazon for a Kindle edition. This is the app we use in production
+at Spokesman.com, with minor changes to obfuscate security-related things.
+
+You probably won't be able to just drop this in place and go, unless you were
+crazy enough to match the Story and Section structure that we use in the CMS
+underneath Spokesman.com. But again, it's a really simple app -- it should be
+easy to tweak the views and templates to match your CMS.
+
+
+==========================
+A Little Intro
+==========================
+
+Amazon wants Kindle editions to match the format of your print newspaper as
+closely as possible. They want a Front Page section, a News section, a Sports
+section, and so on, containing every story you published in print, and ONLY
+those stories. No breaking news posted online, etc.
+
+To do this, you'll need a way to:
+
+* Provide a list of sections, mapping to your print edition's sections,
+  that contained stories on a given pubdate.
+
+* Provide a list of that day's stories within each of those sections.
+
+* Provide article detail pages suitable for ingestion by Amazon's
+  automated process. These should include references to image files
+  associated with the story.
+
+This app should provide a good head start; with a little customization you'll
+have a perfectly Kindle-friendly story feed.
+
+
+==========================
+Views
+==========================
+
+These are named to match Amazon's terminology, for ease of communication.
+Model and field names are obviously specific to our platform. Our CMS is
+called Cannonball; I've left in those references to (hopefully) make it
+obvious where changes will be required.
+
+More explanation is provided with each view in views.py. Here's an overview:
+
+* kindle_section_manifest: Fetches all sections that contain stories published
+  in the print edition for a given pubdate. If no pubdate is provided via URL,
+  the default is today's date.
+
+* kindle_article_manifest: Fetches all stories within a section of the print
+  edition, published on a given pubdate.
+  
+* kindle_article_detail: Returns an individual print-edition story for
+  ingestion by Amazon.
+
+
+==========================
+Templates
+==========================
+
+These templates are also named to match Amazon's terminology, for ease of
+communication. Again, field references and relationships match our models,
+so you'll need to change where appropriate.
+
+The formatting, however, exactly matches Amazon's preferred method of delivery.
+After this app went into production at The Spokesman-Review, the Kindle team
+asked to use our feed as an example for other papers working through the
+integration process. We've never had a bit of trouble with the mechanics.
+
+If you stick with this app's URL setup and template structure, you should
+end up with a pretty bulletproof Kindle feed.
+
+* kindle_section_manifest.xml: (RSS 2.0 format) Lists all sections that
+  contain stories published in the print edition for a given pubdate. Amazon
+  also wants the Kindle edition to provide a "Front Page" section; a link
+  to the corresponding article_manifest is hard-coded into this template.
+
+* kindle_article_manifest.xml: (RSS 2.0 format) Lists all stories within
+  a section of the print edition, published on a given pubdate.
+
+* kindle_article_file.xml: (NITF format) Displays an individual print-edition
+  story for ingestion by Amazon. This template also contains references to
+  images associated with the story.
+
+
+==========================
+Notes
+==========================
+
+* The urls.py in this app makes it possible to fetch a section_manifest
+  for any date in your database. In practice, Amazon should only ever
+  need stories from the *current* date, but this is built in, just in case.
+  If you don't want to expose your entire archive, you can modify this, or 
+  just use the allowed_timeframe variable in views.py.
+  
+* For security reasons, you may want to limit access to this XML feed. The
+  utils in this app offer an IP-based method; to enable this you'll need
+  a list of IP addresses from Amazon. Add them to APPROVED_IPS in
+  utils.ip_whitelist, then add an ip_in_whitelist check to each view.
+  
+* Amazon fetches stories for the Kindle edition early each morning, so
+  naturally you'll need some sort of overnight system to get print-edition
+  stories into your web CMS.
+  
+* If something fails, you can alert Amazon to delay the ingestion of your
+  story feed. We use a cron job to count the number of stories for the day,
+  and fire off an email to Amazon (and our web team) if something looks wrong.
