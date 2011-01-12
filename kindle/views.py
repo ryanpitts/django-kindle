@@ -58,10 +58,13 @@ def kindle_article_manifest(request, year, month, day, section, template='kindle
     '''
     SITE = Site.objects.get_current()
     try:
+        year = "%04d" % int(year)
+        month = "%02d" % int(month)
+        day = "%02d" % int(day)
         search_date = datetime.datetime(*time.strptime(year+month+day, '%Y'+'%m'+'%d')[:3])
-        year = int(search_date.strftime('%Y')) 
-        month = int(search_date.strftime('%m')) 
-        day = int(search_date.strftime('%d'))
+        year = int(year)
+        month = int(month)
+        day = int(day)
     except ValueError:
         raise Http404
         
