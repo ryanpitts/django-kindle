@@ -56,6 +56,7 @@ def kindle_article_manifest(request, year, month, day, section, template='kindle
     This feeds an RSS 2.0 template.
     
     '''
+    
     SITE = Site.objects.get_current()
     try:
         year = "%04d" % int(year)
